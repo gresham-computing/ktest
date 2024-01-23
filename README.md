@@ -46,7 +46,7 @@ The idea behind this is that although the source and repartition messages produc
 
 In the case of the repartition messages, we want them to cause a repartition in our system mock of the partitions, so we catch them and feed them back into the system using the `CompletingInternalsDriver`, which allows them to be separated onto different partitions by the `PartitioningDriver`.
 
-In the case of the source messages, we want them to get the opportunity to be shuffled and read in a different order, so we catch them and feed them back into the system using the `RecursionDriver`, which allows them to be reordered by the `ShuffleDriver` 
+In the case of the source messages, we want them to get the opportunity to be shuffled and read in a different order, so we catch them and feed them back into the system using the `RecursionDriver`, which allows them to be reordered by the `ShuffleDriver`. We also want them to be forwarded to the other topologies, so the `RecursionDriver` needs to be outside the `CombiningDriver`.
 
 The `TopologyDriver` then returns a map of topic name (for non-repartition topics) or topic properties map (for repartition topics) to a list of messages published to that topic.
 
@@ -66,7 +66,7 @@ This driver can be found in the `combined-driver` namespace. It receives a colle
 
 ### The BatchUpDriver
 
-The `BatchUpDriver` lives in the `batching-driver` namespace. It fulfils the `BatchDriver` interface, rather than the `Driver` interface. The only difference between the two is that the `pipe-input` method on the `Driver` interface takes a topic and a single message, while the same method on the `BatchDriver` interface takes a sequence of messages (all of which must have the `:topic` field).
+The `BatchUpDriver` lives in the `batching-driver` namespace. It fulfils the `BatchDriver` interface, rather than the `Driver` interface. The only difference between the two is that the `pipe-input` method on the `Driver` interface takes a topic and a single message, while the `pipe-inputs` method on the `BatchDriver` interface takes a sequence of messages (all of which must have the `:topic` field).
 
 As you'd expect, the `BatchUpDriver` delegates to an `CombiningDriver`, iterating over each message, and passing in the `:topic` field separately.
 
