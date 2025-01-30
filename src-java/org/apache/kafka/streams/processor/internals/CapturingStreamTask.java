@@ -1,5 +1,6 @@
 package org.apache.kafka.streams.processor.internals;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -52,23 +53,35 @@ public class CapturingStreamTask extends StreamTask {
 				);
 	}
 
-	public CapturingStreamTask(StreamTask delegate, IFn privateFieldGetter, IFn capture) {
+	static <T> T getPrivateField(StreamTask delegate, String fieldName, Class fieldType) {
+	  try {
+		  var handle = MethodHandles
+				  .privateLookupIn(StreamTask.class, MethodHandles.lookup())
+				  .findVarHandle(StreamTask.class, fieldName, fieldType);
+		  return (T) handle.get(delegate);
+	  }  catch (Exception e) {
+		  System.out.println(e);
+		  return null;
+	  }
+	}
+
+	public CapturingStreamTask(StreamTask delegate, IFn capture) {
 		// don't talk to me about this
 		super(delegate.id(),
 				delegate.inputPartitions(),
 				delegate.topology,
-				(Consumer<byte[], byte[]>) privateFieldGetter.invoke(delegate, "mainConsumer"),
+                getPrivateField(delegate, "mainConsumer", Consumer.class),
 				dumbConfigTask(),
-				dumbMetrics((Time) privateFieldGetter.invoke(delegate, "time")),
+				dumbMetrics(getPrivateField(delegate, "time", Time.class)),
 				delegate.stateDirectory,
 				null,
-				(Time) privateFieldGetter.invoke(delegate, "time"),
+                getPrivateField(delegate, "time", Time.class),
 				delegate.stateMgr,
-				(RecordCollector) privateFieldGetter.invoke(delegate, "recordCollector"),
+                getPrivateField(delegate, "recordCollector", RecordCollector.class),
 				new ProcessorContextImpl(
 						delegate.id(),
 						dumbConfigStreams(), delegate.stateMgr,
-						dumbMetrics((Time) privateFieldGetter.invoke(delegate, "time")),
+						dumbMetrics(getPrivateField(delegate, "time", Time.class)),
 						null) {
 					@Override
 					public void transitionToActive(StreamTask streamTask, RecordCollector recordCollector, ThreadCache newCache) { }
