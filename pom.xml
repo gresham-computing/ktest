@@ -4,9 +4,30 @@
   <packaging>jar</packaging>
   <groupId>djs</groupId>
   <artifactId>ktest</artifactId>
-  <version>3.4.2-alpha1</version>
+  <version>3.4.2-alpha2</version>
   <name>ktest</name>
-  <dependencies/>
+  <dependencies>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>clojure</artifactId>
+      <version>1.10.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-streams-test-utils</artifactId>
+      <version>7.4.2-ccs</version>
+    </dependency>
+    <dependency>
+      <groupId>digest</groupId>
+      <artifactId>digest</artifactId>
+      <version>1.4.9</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-streams</artifactId>
+      <version>7.4.2-ccs</version>
+    </dependency>
+  </dependencies>
   <build>
     <sourceDirectory>src</sourceDirectory>
     <plugins>
