@@ -53,19 +53,14 @@ public class CapturingStreamTask extends StreamTask {
 				);
 	}
 
-	static <T> T getPrivateField(StreamTask delegate, String fieldName, Class fieldType) {
-	  try {
-		  var handle = MethodHandles
-				  .privateLookupIn(StreamTask.class, MethodHandles.lookup())
-				  .findVarHandle(StreamTask.class, fieldName, fieldType);
-		  return (T) handle.get(delegate);
-	  }  catch (Exception e) {
-		  System.out.println(e);
-		  return null;
-	  }
+	static <T> T getPrivateField(StreamTask delegate, String fieldName, Class fieldType) throws NoSuchFieldException, IllegalAccessException {
+	  var handle = MethodHandles
+			  .privateLookupIn(StreamTask.class, MethodHandles.lookup())
+			  .findVarHandle(StreamTask.class, fieldName, fieldType);
+	  return (T) handle.get(delegate);
 	}
 
-	public CapturingStreamTask(StreamTask delegate, IFn capture) {
+	public CapturingStreamTask(StreamTask delegate, IFn capture) throws NoSuchFieldException, IllegalAccessException {
 		// don't talk to me about this
 		super(delegate.id(),
 				delegate.inputPartitions(),

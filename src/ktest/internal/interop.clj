@@ -27,7 +27,8 @@
   (let [t (TopologyTestDriver. ^Topology topology
                                ^Properties (properties config)
                                ^Long epoch-millis)
-        task (TopologyInternalsAccessor/getTestStreamTask t)
+        tia (TopologyInternalsAccessor.)
+        task (.getTestStreamTask tia t)
         wrapped-task (when task (CapturingStreamTask. task output-capture))]
-    (TopologyInternalsAccessor/setTestStreamTask t wrapped-task)
+    (.setTestStreamTask tia t wrapped-task)
     t))

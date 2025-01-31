@@ -6,49 +6,40 @@ import org.apache.kafka.streams.processor.internals.ProcessorTopologyAccessor;
 import org.apache.kafka.streams.processor.internals.StreamTask;
 
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 
 public class TopologyInternalsAccessor {
 
-	private TopologyInternalsAccessor() {
-	}
+    private VarHandle handle;
 
-	public static InternalTopologyBuilder internalTopologyBuilder(Topology topology) {
-		return topology.internalTopologyBuilder;
-	}
+    public TopologyInternalsAccessor() throws NoSuchFieldException, IllegalAccessException {
+        this.handle = MethodHandles
+                .privateLookupIn(TopologyTestDriver.class, MethodHandles.lookup())
+                .findVarHandle(TopologyTestDriver.class, "task", StreamTask.class);
+    }
 
-	public static ProcessorTopology processorTopology(TopologyTestDriver topologyTestDriver) {
-		return topologyTestDriver.processorTopology;
-	}
+    public static InternalTopologyBuilder internalTopologyBuilder(Topology topology) {
+        return topology.internalTopologyBuilder;
+    }
 
-	public static ProcessorTopology globalProcessorTopology(TopologyTestDriver topologyTestDriver) {
-		return topologyTestDriver.globalTopology;
-	}
+    public static ProcessorTopology processorTopology(TopologyTestDriver topologyTestDriver) {
+        return topologyTestDriver.processorTopology;
+    }
 
-	public static StreamTask getTestStreamTask(TopologyTestDriver topologyTestDriver) {
-		try {
-			var handle = MethodHandles
-					.privateLookupIn(TopologyTestDriver.class, MethodHandles.lookup())
-					.findVarHandle(TopologyTestDriver.class, "task", StreamTask.class);
+    public static ProcessorTopology globalProcessorTopology(TopologyTestDriver topologyTestDriver) {
+        return topologyTestDriver.globalTopology;
+    }
 
-			return (StreamTask) handle.get(topologyTestDriver);
-		} catch (Exception e){
-			return null;
-		}
-	}
+    public StreamTask getTestStreamTask(TopologyTestDriver topologyTestDriver) {
+        return (StreamTask) this.handle.get(topologyTestDriver);
+    }
 
-	public static void setTestStreamTask(TopologyTestDriver topologyTestDriver, StreamTask t) {
-		try {
-			var handle = MethodHandles
-					.privateLookupIn(TopologyTestDriver.class, MethodHandles.lookup())
-					.findVarHandle(TopologyTestDriver.class, "task", StreamTask.class);
+    public void setTestStreamTask(TopologyTestDriver topologyTestDriver, StreamTask t) {
+        this.handle.set(topologyTestDriver, t);
+    }
 
-			handle.set(topologyTestDriver, t);
-		} catch (Exception e){
-		}
-	}
-
-	public static boolean isRepartitionTopic(ProcessorTopology processorTopology, String topic) {
-		return ProcessorTopologyAccessor.isRepartitionTopic(processorTopology, topic);
-	}
+    public static boolean isRepartitionTopic(ProcessorTopology processorTopology, String topic) {
+        return ProcessorTopologyAccessor.isRepartitionTopic(processorTopology, topic);
+    }
 
 }
