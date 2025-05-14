@@ -1,87 +1,105 @@
 (ns ktest.stores
-  (:import (java.time
-            Duration)
+  (:import (java.time Duration)
+           (java.util List)
+           (org.apache.kafka.common.utils Time)
            (org.apache.kafka.streams
-            TopologyInternalsAccessor)
+             TopologyInternalsAccessor)
+           (org.apache.kafka.streams.kstream.internals KeyValueStoreMaterializer MaterializedStoreFactory MaterializedStoreFactoryAccessor)
            (org.apache.kafka.streams.processor
-            StateStore)
+             ProcessorContext StateRestoreCallback StateStore)
            (org.apache.kafka.streams.processor.internals
-            InternalTopologyBuilder
-            InternalTopologyBuilder$StateStoreFactory)
+             InternalTopologyBuilder StoreBuilderWrapper StoreFactory)
            (org.apache.kafka.streams.state
-            StoreBuilder
-            Stores)
-           (org.apache.kafka.streams.state.internals
-            AbstractStoreBuilder
-            KeyValueStoreBuilder
-            SessionStoreBuilder
-            StoreAccessor
-            TimestampedKeyValueStoreBuilder
-            TimestampedWindowStoreBuilder
-            ValueAndTimestampDeserializer
-            ValueAndTimestampSerde
-            WindowStoreBuilder)))
+             Stores TimestampedKeyValueStore)
+           (org.apache.kafka.streams.state.internals AbstractStoreBuilder CachedStateStore KeyValueStoreBuilder SessionStoreBuilder StoreAccessor TimestampedKeyValueStoreBuilder ValueAndTimestampSerde WrappedStateStore)))
 
-(def ^:private store-factory-users-field
-  (let [f (.getDeclaredField InternalTopologyBuilder$StateStoreFactory "users")]
-    (.setAccessible f true)
-    f))
-
-(def ^:private store-factory-builder-field
-  (let [f (.getDeclaredField InternalTopologyBuilder$StateStoreFactory "builder")]
-    (.setAccessible f true)
-    f))
-
-(def ^:private store-factory-global-state-builders-field
+(def ^:private global-state-builders-field
   (let [f (.getDeclaredField InternalTopologyBuilder "globalStateBuilders")]
     (.setAccessible f true)
     f))
 
-(defrecord SingletonStoreBuilder
-  [^StoreBuilder sb ^StateStore s]
+(def ^:private store-factory-builder-field
+  (let [f (.getDeclaredField StoreBuilderWrapper "builder")]
+    (.setAccessible f true)
+    f))
 
-  StoreBuilder
+(defrecord SingletonStoreFactory
+  [^StoreFactory sf build]
 
-  (build [_] s)
+  StoreFactory
 
+  (build [_] (build))
 
-  (withCachingEnabled [this] this)
+  (configure [_this config] (.configure sf config))
 
+  (retentionPeriod [_this] (.retentionPeriod sf))
 
-  (withCachingDisabled [this] this)
+  (historyRetention [_this] (.historyRetention sf))
 
+  (connectedProcessorNames [_this] (.connectedProcessorNames sf))
 
-  (withLoggingEnabled [this _] this)
+  (loggingEnabled [_this] (.loggingEnabled sf))
 
+  (name [_this] (.name sf))
 
-  (withLoggingDisabled [this] this)
+  (isWindowStore [_this] (.isWindowStore  sf))
 
+  (isVersionedStore [_this] (.isVersionedStore sf))
 
-  (logConfig [_] (.logConfig sb))
+  (logConfig [_this] (.logConfig sf))
 
+  (withCachingDisabled [_this] (.withCachingDisabled sf))
 
-  (loggingEnabled [_] (.loggingEnabled sb))
+  (withLoggingDisabled [_this] (.withLoggingDisabled sf))
 
+  (isCompatibleWith [_this v] (.isCompatibleWith sf v)))
 
-  (name [_] (.name sb)))
+(defn- singleton-store-builder
+  [^StoreFactory sb]
+  (let [inner-store (atom nil)]
+    (->SingletonStoreFactory
+      sb
+      (fn []
+        (when-not (and @inner-store
+                       (.isOpen @inner-store))
+          (reset! inner-store (.build sb)))
+        (cond
+          (isa? (type @inner-store) TimestampedKeyValueStore)
+          (proxy
+            [WrappedStateStore TimestampedKeyValueStore CachedStateStore]
+            [@inner-store]
+            (^void init [^ProcessorContext v1 ^StateStore v2]
+              (if (.isOpen @inner-store)
+                (.register v1 this (reify StateRestoreCallback (restore [_this _a _b])))
+                (.init @inner-store v1 v2)))
+            (flush [] (.flush @inner-store))
+            (close [] (.close @inner-store))
+            (persistent [] (.persistent @inner-store))
+            (isOpen [] (.isOpen @inner-store))
+            (name [] (.name @inner-store))
+            (get [k] (.get @inner-store k))
+            (range [k1 k2] (.range @inner-store k1 k2))
+            (reverseRange [k1 k2] (.reverseRange @inner-store k1 k2))
+            (all [] (.all @inner-store))
+            (prefixScan [v1 v2] (.prefixScan @inner-store v1 v2))
+            (put [k v] (.put @inner-store k v))
+            (putIfAbsent [k v] (.putIfAbsent @inner-store k v))
+            (^void putAll [^List kvs] (.putAll @inner-store kvs))
+            (delete [k] (.delete @inner-store k))
+            (approximateNumEntries [] (.approximateNumEntries @inner-store))
+            (setFlushListener [listener, send-old-values] (.setFlushListener ^WrappedStateStore @inner-store listener send-old-values))
+            (flushCache [] (.flushCache @inner-store))
+            (clearCache [] (.clearCache @inner-store))
+            (wrapped [] (do @inner-store)))
 
-(defmulti find-known-alternative
-  (fn [builder _store-name] (type builder)))
+          :else
+          (throw (Exception. "Unsupported factory type")))))))
 
-(defmethod find-known-alternative :default
-  [builder store-name]
-  (println "Store [" store-name "] was of an unhandled type [" (type builder) "] and could not be sped up")
-  builder)
-
-(defmethod find-known-alternative SingletonStoreBuilder
-  [builder _]
-  builder)
-
-(defn key-serde
+(defn builder->key-serde
   [^AbstractStoreBuilder builder]
   (StoreAccessor/keySerde builder))
 
-(defn value-serde
+(defn builder->value-serde
   [^AbstractStoreBuilder builder]
   (StoreAccessor/valueSerde builder))
 
@@ -89,69 +107,88 @@
   [^ValueAndTimestampSerde serde]
   (StoreAccessor/deTimestampSerde serde))
 
-(defmethod find-known-alternative KeyValueStoreBuilder
+(defmulti find-store-builder-alternative
+          (fn [^AbstractStoreBuilder store-builder _store-name]
+            (type store-builder)))
+
+(defmethod find-store-builder-alternative :default
+  [builder store-name]
+  (println "Store Builder [" store-name "] was of an unhandled type [" (type builder) "] and could not be sped up")
+  builder)
+
+(defmethod find-store-builder-alternative KeyValueStoreBuilder
   [builder store-name]
   (Stores/keyValueStoreBuilder
-   (Stores/inMemoryKeyValueStore store-name)
-   (key-serde builder) (value-serde builder)))
+    (Stores/inMemoryKeyValueStore store-name)
+    (builder->key-serde builder) (builder->value-serde builder)))
 
-(defmethod find-known-alternative TimestampedKeyValueStoreBuilder
+(defmethod find-store-builder-alternative TimestampedKeyValueStoreBuilder
   [builder store-name]
   (Stores/timestampedKeyValueStoreBuilder
-   (Stores/inMemoryKeyValueStore store-name)
-   (key-serde builder) (de-timestamp-serde (value-serde builder))))
+    (Stores/inMemoryKeyValueStore store-name)
+    (builder->key-serde builder) (de-timestamp-serde (builder->value-serde builder))))
 
-(defmethod find-known-alternative SessionStoreBuilder
-  [builder store-name]
-  (Stores/sessionStoreBuilder
-   (Stores/inMemorySessionStore store-name
-                                (Duration/ofMillis (.retentionPeriod builder)))
-   (key-serde builder) (value-serde builder)))
+(defmulti find-store-factory-alternative
+          (fn [^StoreFactory store-factory _store-name]
+            (type store-factory)))
 
-;; can't be bothered to get window sizes currently
+(defmethod find-store-factory-alternative :default
+  [factory store-name]
+  (println "Store Factory [" store-name "] was of an unhandled type [" (type factory) "] and could not be sped up")
+  factory)
 
-#_(defmethod find-known-alternative WindowStoreBuilder
-    [builder store-name]
-    (Stores/windowStoreBuilder
+(defmethod find-store-factory-alternative SingletonStoreFactory
+  [store-factory _store-name]
+  store-factory)
+
+(defmethod find-store-factory-alternative StoreBuilderWrapper
+  [store-factory store-name]
+  (-> (.get store-factory-builder-field store-factory)
+      (find-store-builder-alternative store-name)
+      (StoreBuilderWrapper.)))
+
+(defn materialised->key-serde
+  [^MaterializedStoreFactory builder]
+  (MaterializedStoreFactoryAccessor/keySerde builder))
+
+(defn materialised->value-serde
+  [^MaterializedStoreFactory builder]
+  (MaterializedStoreFactoryAccessor/valueSerde builder))
+
+(defmethod find-store-factory-alternative KeyValueStoreMaterializer
+  [^KeyValueStoreMaterializer store-factory store-name]
+  (StoreBuilderWrapper.
+    (TimestampedKeyValueStoreBuilder.
       (Stores/inMemoryKeyValueStore store-name)
-      (key-serde builder) (value-serde builder)))
-
-#_(defmethod find-known-alternative TimestampedWindowStoreBuilder
-    [builder store-name]
-    (Stores/timestampedWindowStoreBuilder
-      (Stores/inMemoryWindowStore store-name)
-      (key-serde builder) (value-serde builder)))
-
-(defn alternative-store-builder
-  [builder store-name]
-  (.withLoggingDisabled (find-known-alternative builder store-name)))
+      (materialised->key-serde store-factory)
+      (materialised->value-serde store-factory)
+      Time/SYSTEM)))
 
 (defn alternative-store
-  [store-name ^InternalTopologyBuilder$StateStoreFactory state-store-factory]
-  (let [builder (.get store-factory-builder-field state-store-factory)
-        users (.get store-factory-users-field state-store-factory)
-        alt (alternative-store-builder builder store-name)]
-    {:name store-name
-     :users (set users)
-     :builder alt}))
-
-(defn- singleton-store-builder
-  [^StoreBuilder sb]
-  (->SingletonStoreBuilder sb (.build sb)))
+  [store-name ^StoreFactory state-store-factory]
+  (-> (find-store-factory-alternative state-store-factory store-name)
+      (.withLoggingDisabled)))
 
 (defn share-global-stores
   [topology]
   (let [i-builder (TopologyInternalsAccessor/internalTopologyBuilder topology)
-        global-store-builders (.get store-factory-global-state-builders-field i-builder)]
+        global-store-builders (.get global-state-builders-field i-builder)]
     (doseq [[n sb] global-store-builders]
-      (.put global-store-builders n (singleton-store-builder (alternative-store-builder sb n))))
-    topology))
+      (when-not (isa? (type sb) SingletonStoreFactory)
+        (.put global-store-builders n (singleton-store-builder sb)))))
+  topology)
 
 (defn mutate-to-fast-stores
   [topology]
   (let [i-builder (TopologyInternalsAccessor/internalTopologyBuilder topology)
         store-factories (.stateStores ^InternalTopologyBuilder i-builder)]
-    (doseq [store-name (keys store-factories)
-            :let [{:keys [users builder]} (alternative-store store-name (get store-factories store-name))]]
-      (.addStateStore i-builder builder true (into-array String users)))
+    (doseq [store-name (keys store-factories)]
+      (let [^StoreFactory original-factory (get store-factories store-name)]
+        (let [^StoreFactory replacement-factory (alternative-store store-name original-factory)]
+          (.addStateStore
+            i-builder
+            replacement-factory
+            true
+            (->> (.connectedProcessorNames original-factory)
+                 (into-array String))))))
     topology))

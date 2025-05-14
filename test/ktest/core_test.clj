@@ -405,6 +405,33 @@
                                     :global-ktable-2 "global-value-2"}}]}
            (sut/pipe driver "join-input" {:key "k" :value "global-key"})))))
 
+(deftest restarting-global-kt
+  (let [topology (constantly (global-kt-topology))]
+    (with-open [driver (sut/driver j/serde-config
+                                   {"global-kt" topology})]
+      (sut/pipe driver "normal-input" {:key "k" :value "normal-value"})
+      (sut/pipe driver "global-input" {:key "global-key" :value "global-value"})
+      (sut/pipe driver "global-input-2" {:key "global-key" :value "global-value-2"})
+
+      (is (= {"join-output" [{:key "k"
+                              :value {:stream "global-key"
+                                      :normal-ktable "normal-value"
+                                      :global-ktable "global-value"
+                                      :global-ktable-2 "global-value-2"}}]}
+             (sut/pipe driver "join-input" {:key "k" :value "global-key"}))))
+    (with-open [driver (sut/driver j/serde-config
+                                   {"global-kt" topology})]
+      (sut/pipe driver "normal-input" {:key "k" :value "normal-value"})
+      (sut/pipe driver "global-input" {:key "global-key" :value "global-value"})
+      (sut/pipe driver "global-input-2" {:key "global-key" :value "global-value-2"})
+
+      (is (= {"join-output" [{:key "k"
+                              :value {:stream "global-key"
+                                      :normal-ktable "normal-value"
+                                      :global-ktable "global-value"
+                                      :global-ktable-2 "global-value-2"}}]}
+             (sut/pipe driver "join-input" {:key "k" :value "global-key"}))))))
+
 (defn get-from-store
   [ctx store-name k]
   (let [^KeyValueStore store (.getStateStore ctx store-name)

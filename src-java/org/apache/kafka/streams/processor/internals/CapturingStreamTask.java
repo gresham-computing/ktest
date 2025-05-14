@@ -81,7 +81,8 @@ public class CapturingStreamTask extends StreamTask {
 					@Override
 					public void transitionToActive(StreamTask streamTask, RecordCollector recordCollector, ThreadCache newCache) { }
 				},
-        new LogContext( "streams-task"));
+        new LogContext( "streams-task"),
+		true);
 		this.delegate = delegate;
 		this.capture = capture;
 	}
@@ -255,6 +256,16 @@ public class CapturingStreamTask extends StreamTask {
 	@Override
 	public void clearTaskTimeout() {
 		delegate.clearTaskTimeout();
+	}
+
+	@Override
+	public void resumePollingForPartitionsWithAvailableSpace() {
+	  delegate.resumePollingForPartitionsWithAvailableSpace();
+	}
+
+	@Override
+	public void updateLags() {
+		delegate.updateLags();
 	}
 
 	public boolean needsInitializationOrRestoration() {

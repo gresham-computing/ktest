@@ -7,6 +7,23 @@
 
 (def opts (mk-opts j/serde-config))
 
+(defn very-simple-topology
+  []
+  (let [builder (j/streams-builder)]
+    (-> (j/kstream builder (j/topic-config "input"))
+        (j/to (j/topic-config "output")))
+    (j/build-topology builder)))
+
+(deftest driving-simple-topology
+  (with-open [driver (sut/driver "application-id"
+                                 "partition-id"
+                                 very-simple-topology
+                                 opts)]
+
+    (is (= {"output" [{:key "k"
+                       :value "v1"}]}
+           (driver/pipe-input driver "input" {:key "k" :value "v1"})))))
+
 (defn repartition-transform-topology
   []
   (let [builder (j/streams-builder)
@@ -22,7 +39,7 @@
         (j/to (j/topic-config "join-output")))
     (j/build-topology builder)))
 
-(deftest driver-test
+(deftest driving-topology-with-join
   (with-open [driver (sut/driver "application-id"
                                  "partition-id"
                                  repartition-transform-topology
