@@ -6,8 +6,8 @@
 (defn default-topology-mutator
   [topology _opts]
   (-> topology
-      stores/share-global-stores
-      stores/mutate-to-fast-stores))
+      stores/mutate-to-fast-stores
+      stores/share-global-stores))
 
 (defn default-partition-strategy
   [topic {:keys [key] :as msg} {:keys [key-serde]}]

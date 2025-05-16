@@ -30,6 +30,13 @@ To build the java classes, run `clj -M:build`. If you want to build the java cla
 
 Once the java classes have been built, you can run the clojure code and tests in a repl as normal, although of course any change to the java classes will require you to rebuild the java classes and restart your repl.
 
+## Update CCM
+
+- ktest/install.sh $VERSION
+- cp ktest/target/ktest.jar ccm/library/ktest/ktest-$VERSION.jar
+- cp ktest/pom.xml ccm/library/ktest/ktest-$VERSION.pom
+- replace all instances of old version number with new version number in ccm files
+
 ## Library Structure - Drivers
 
 The library's functionality is split across several nested drivers. These provide a certain amount of encapsulation between different features, but some features are spread across different drivers and it's important to understand which these are in order to understand how these features work
