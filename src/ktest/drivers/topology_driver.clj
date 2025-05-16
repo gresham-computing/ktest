@@ -188,13 +188,10 @@
         p (TopologyInternalsAccessor/processorTopology driver)
         gp (TopologyInternalsAccessor/globalProcessorTopology driver)
 
-        custom-repartition-topic? (or (:repartition-topic? opts)
-                                      (fn [_topic]
-                                        false))
-        repartition-topic? (fn [topic]
-                             (or (when p (TopologyInternalsAccessor/isRepartitionTopic p topic))
-                                 (when gp (TopologyInternalsAccessor/isRepartitionTopic gp topic))
-                                 (custom-repartition-topic? topic)))
+        repartition-topic? (or (:repartition-topic? opts)
+                               (fn [topic]
+                                 (or (when p (TopologyInternalsAccessor/isRepartitionTopic p topic))
+                                     (when gp (TopologyInternalsAccessor/isRepartitionTopic gp topic)))))
 
         p-sources (when p (.sourceTopics p))
         gp-sources (when gp (.sourceTopics gp))
