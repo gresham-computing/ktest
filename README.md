@@ -35,6 +35,8 @@ Once the java classes have been built, you can run the clojure code and tests in
 - ktest/install.sh $VERSION
 - cp ktest/target/ktest.jar ccm/library/ktest/ktest-$VERSION.jar
 - cp ktest/pom.xml ccm/library/ktest/ktest-$VERSION.pom
+- cd ccm
+- git add -f library/ktest/ktest-$VERSION.jar
 - replace all instances of old version number with new version number in ccm files
 
 ## Library Structure - Drivers
