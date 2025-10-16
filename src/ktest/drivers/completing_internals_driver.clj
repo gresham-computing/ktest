@@ -44,6 +44,7 @@
     [_ topic message]
     (process-messages-to-completion 0 opts driver [(assoc message :topic topic)] {}))
 
+
   (advance-time
     [_ advance-millis]
     (let [initial-result (advance-time driver advance-millis)
