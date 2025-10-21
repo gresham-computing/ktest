@@ -1,26 +1,28 @@
 (ns ktest.internal.interop
-  (:import (java.lang.invoke MethodHandles VarHandle)
+  (:import (java.lang.invoke
+            MethodHandles
+            VarHandle)
            (java.lang.reflect
-             Field
-             Modifier)
+            Field
+            Modifier)
            (java.util
-             Properties)
+            Properties)
            (org.apache.kafka.streams
-             Topology
-             TopologyInternalsAccessor
-             TopologyTestDriver)
+            Topology
+            TopologyInternalsAccessor
+            TopologyTestDriver)
            (org.apache.kafka.streams.processor.internals
-             CapturingStreamTask
-             StreamTask)))
+            CapturingStreamTask
+            StreamTask)))
 
 (defn- properties
   [p]
   (reduce-kv
-    (fn [p k v]
-      (doto p
-        (.setProperty (name k) v)))
-    (Properties.)
-    p))
+   (fn [p k v]
+     (doto p
+       (.setProperty (name k) v)))
+   (Properties.)
+   p))
 
 (defn test-driver
   [topology config epoch-millis output-capture]

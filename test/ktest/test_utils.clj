@@ -12,8 +12,6 @@
            (org.apache.kafka.streams
             KeyValue
             StreamsBuilder)
-           (org.apache.kafka.streams.state
-             Stores)
            (org.apache.kafka.streams.kstream
             Aggregator
             Consumed
@@ -37,7 +35,9 @@
             ProcessorContext
             PunctuationType
             Punctuator
-            To)))
+            To)
+           (org.apache.kafka.streams.state
+            Stores)))
 
 (def edn-serde
   (Serdes/serdeFrom

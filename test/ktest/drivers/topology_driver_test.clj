@@ -88,4 +88,3 @@
                                  topology-with-store-not-used
                                  opts)]
     (driver/stores-info driver)))
-

@@ -49,4 +49,3 @@
   "Combines together multiple drivers, sending inputs to all of them"
   [drivers opts]
   (->CombiningDriver (atom (:initial-ms opts)) opts drivers))
-
