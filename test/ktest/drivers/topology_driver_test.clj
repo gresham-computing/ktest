@@ -5,9 +5,9 @@
             [ktest.protocols.driver :as driver]
             [ktest.test-utils :as j])
   (:import (org.apache.kafka.common.header.internals
-             RecordHeader)
+            RecordHeader)
            (org.apache.kafka.streams.processor.api
-             FixedKeyRecord)))
+            FixedKeyRecord)))
 
 (def opts (mk-opts j/serde-config))
 

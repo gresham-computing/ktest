@@ -148,12 +148,16 @@
   [^KStream kstream f]
   (.processValues kstream
                   (reify FixedKeyProcessorSupplier
-                    (get [_]
+                    (get
+                      [_]
                       (let [ctx (atom nil)]
                         (reify FixedKeyProcessor
-                          (init [_ context]
+                          (init
+                            [_ context]
                             (reset! ctx context))
-                          (process [_ record]
+
+                          (process
+                            [_ record]
                             (f record)
                             (.forward ^FixedKeyProcessorContext @ctx record))))))
                   (into-array String [])))
