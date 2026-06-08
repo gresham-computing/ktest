@@ -36,6 +36,11 @@
             PunctuationType
             Punctuator
             To)
+           (org.apache.kafka.streams.processor.api
+            FixedKeyProcessor
+            FixedKeyProcessorContext
+            FixedKeyProcessorSupplier
+            FixedKeyRecord)
            (org.apache.kafka.streams.state
             Stores)))
 
@@ -139,6 +144,19 @@
               ^ValueJoiner (reify ValueJoiner
                              (apply [_ a b] (joiner-fn a b))))))
 
+(defn process-values
+  [^KStream kstream f]
+  (.processValues kstream
+                  (reify FixedKeyProcessorSupplier
+                    (get [_]
+                      (let [ctx (atom nil)]
+                        (reify FixedKeyProcessor
+                          (init [_ context]
+                            (reset! ctx context))
+                          (process [_ record]
+                            (f record)
+                            (.forward ^FixedKeyProcessorContext @ctx record))))))
+                  (into-array String [])))
 (defn to
   [kstream topic-config]
   (.to ^KStream kstream

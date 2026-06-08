@@ -3,7 +3,11 @@
             [ktest.config :refer [mk-opts]]
             [ktest.drivers.topology-driver :as sut]
             [ktest.protocols.driver :as driver]
-            [ktest.test-utils :as j]))
+            [ktest.test-utils :as j])
+  (:import (org.apache.kafka.common.header.internals
+             RecordHeader)
+           (org.apache.kafka.streams.processor.api
+             FixedKeyRecord)))
 
 (def opts (mk-opts j/serde-config))
 
@@ -88,3 +92,24 @@
                                  topology-with-store-not-used
                                  opts)]
     (driver/stores-info driver)))
+
+(defn header-setting-topology
+  []
+  (let [builder (j/streams-builder)]
+    (-> (j/kstream builder (j/topic-config "input"))
+        (j/process-values
+         (fn [^FixedKeyRecord record]
+           (.add (.headers record) (RecordHeader. "audit.test" (.getBytes "hello")))))
+        (j/to (j/topic-config "output")))
+    (j/build-topology builder)))
+
+(deftest headers-captured-as-metadata
+  (with-open [driver (sut/driver "application-id"
+                                 "partition-id"
+                                 header-setting-topology
+                                 opts)]
+    (let [result (driver/pipe-input driver "input" {:key "k" :value {:foo "bar"}})
+          output-value (-> result (get "output") first :value)]
+      (is (= {:foo "bar"} output-value))
+      (is (= {"audit.test" "hello"}
+             (:kafka-headers (meta output-value)))))))

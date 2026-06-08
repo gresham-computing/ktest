@@ -8,6 +8,8 @@
             Instant)
            (org.apache.kafka.common
             TopicPartition)
+           (org.apache.kafka.common.header
+            Header)
            (org.apache.kafka.streams
             TopologyInternalsAccessor
             TopologyTestDriver)
@@ -52,11 +54,24 @@
           ;; let it go through the current topology
           :else (.addRecords delegate topic-partition [message]))))))
 
+(defn- headers->map
+  [headers]
+  (->> headers
+       (map (fn [^Header h]
+              [(.key h) (when-let [v (.value h)] (String. v))]))
+       (into {})))
+
 (defn- read-exhaustively
   [^TopologyTestDriver driver sink opts]
   (->> (.createOutputTopic driver sink (.deserializer (:key-serde opts)) (.deserializer (:value-serde opts)))
        (.readRecordsToList)
-       (map #(do {sink [{:key (.key %) :value (.value %)}]}))))
+       (map (fn [record]
+              (let [value (.value record)
+                    hdrs (headers->map (.headers record))
+                    value (if (and (seq hdrs) (some? value) (instance? clojure.lang.IObj value))
+                            (with-meta value {:kafka-headers hdrs})
+                            value)]
+                {sink [{:key (.key record) :value value}]})))))
 
 (defn- collect-outputs
   [^TopologyTestDriver driver sinks opts]
