@@ -1,6 +1,9 @@
 (ns ktest.stores
-  (:import (java.util
-            List)
+  (:import (java.lang.reflect
+            Field)
+           (java.util
+            List
+            Map)
            (org.apache.kafka.common.serialization
             Serializer)
            (org.apache.kafka.common.utils
@@ -43,13 +46,13 @@
             ValueAndTimestampSerde
             WrappedStateStore)))
 
-(def ^:private global-state-builders-field
-  (let [f (.getDeclaredField InternalTopologyBuilder "globalStateBuilders")]
+(def ^:private ^Field global-state-builders-field
+  (let [^Field f (.getDeclaredField InternalTopologyBuilder "globalStateBuilders")]
     (.setAccessible f true)
     f))
 
-(def ^:private store-factory-builder-field
-  (let [f (.getDeclaredField StoreBuilderWrapper "builder")]
+(def ^:private ^Field store-factory-builder-field
+  (let [^Field f (.getDeclaredField StoreBuilderWrapper "builder")]
     (.setAccessible f true)
     f))
 
@@ -103,53 +106,53 @@
      sb
      (fn []
        (when-not (and @inner-store
-                      (.isOpen @inner-store))
+                      (.isOpen ^StateStore @inner-store))
          (reset! inner-store (.build sb)))
        (cond
          (isa? (type @inner-store) TimestampedKeyValueStore)
          (proxy [WrappedStateStore TimestampedKeyValueStore CachedStateStore]
                 [@inner-store]
            (^void init [^ProcessorContext v1 ^StateStore v2]
-             (if (.isOpen @inner-store)
+             (if (.isOpen ^StateStore @inner-store)
                (.register v1 this (reify StateRestoreCallback
                                     (restore [_this _a _b])))
-               (.init @inner-store v1 v2)))
+               (.init ^TimestampedKeyValueStore @inner-store v1 v2)))
 
-           (flush [] (.flush @inner-store))
+           (flush [] (.flush ^TimestampedKeyValueStore @inner-store))
 
-           (close [] (.close @inner-store))
+           (close [] (.close ^TimestampedKeyValueStore @inner-store))
 
-           (persistent [] (.persistent @inner-store))
+           (persistent [] (.persistent ^StateStore @inner-store))
 
-           (isOpen [] (.isOpen @inner-store))
+           (isOpen [] (.isOpen ^StateStore @inner-store))
 
-           (name [] (.name @inner-store))
+           (name [] (.name ^StateStore @inner-store))
 
-           (get [k] (.get @inner-store k))
+           (get [k] (.get ^TimestampedKeyValueStore @inner-store k))
 
-           (range [k1 k2] (.range @inner-store k1 k2))
+           (range [k1 k2] (.range ^TimestampedKeyValueStore @inner-store k1 k2))
 
-           (reverseRange [k1 k2] (.reverseRange @inner-store k1 k2))
+           (reverseRange [k1 k2] (.reverseRange ^TimestampedKeyValueStore @inner-store k1 k2))
 
-           (all [] (.all @inner-store))
+           (all [] (.all ^TimestampedKeyValueStore @inner-store))
 
-           (prefixScan [v1 v2] (.prefixScan @inner-store v1 v2))
+           (prefixScan [v1 v2] (.prefixScan ^TimestampedKeyValueStore @inner-store v1 v2))
 
-           (put [k v] (.put @inner-store k v))
+           (put [k v] (.put ^TimestampedKeyValueStore @inner-store k v))
 
-           (putIfAbsent [k v] (.putIfAbsent @inner-store k v))
+           (putIfAbsent [k v] (.putIfAbsent ^TimestampedKeyValueStore @inner-store k v))
 
-           (^void putAll [^List kvs] (.putAll @inner-store kvs))
+           (^void putAll [^List kvs] (.putAll ^TimestampedKeyValueStore @inner-store kvs))
 
-           (delete [k] (.delete @inner-store k))
+           (delete [k] (.delete ^TimestampedKeyValueStore @inner-store k))
 
-           (approximateNumEntries [] (.approximateNumEntries @inner-store))
+           (approximateNumEntries [] (.approximateNumEntries ^TimestampedKeyValueStore @inner-store))
 
            (setFlushListener [listener, send-old-values] (.setFlushListener ^WrappedStateStore @inner-store listener send-old-values))
 
-           (flushCache [] (.flushCache @inner-store))
+           (flushCache [] (.flushCache ^CachedStateStore @inner-store))
 
-           (clearCache [] (.clearCache @inner-store))
+           (clearCache [] (.clearCache ^CachedStateStore @inner-store))
 
            (wrapped [] (do @inner-store)))
 
@@ -157,58 +160,58 @@
          (proxy [WrappedStateStore KeyValueStore CachedStateStore StateStore ReadOnlyKeyValueStore]
                 [@inner-store]
 
-           (delete [o] (.delete @inner-store o))
+           (delete [o] (.delete ^KeyValueStore @inner-store o))
 
-           (^void put [o1 o2] (.put @inner-store o1 o2))
+           (^void put [o1 o2] (.put ^KeyValueStore @inner-store o1 o2))
 
-           (^void putAll [^List kvs] (.putAll @inner-store kvs))
+           (^void putAll [^List kvs] (.putAll ^KeyValueStore @inner-store kvs))
 
-           (putIfAbsent [o1 o2] (.putIfAbsent @inner-store o1 o2))
+           (putIfAbsent [o1 o2] (.putIfAbsent ^KeyValueStore @inner-store o1 o2))
 
-           (^String name [] (.name @inner-store))
+           (^String name [] (.name ^StateStore @inner-store))
 
            (^void init [^StateStoreContext ctx ^StateStore s]
-             (if (.isOpen @inner-store)
+             (if (.isOpen ^StateStore @inner-store)
                (.register ctx this (reify StateRestoreCallback
                                      (restore [_this _a _b])))
-               (.init @inner-store ctx s)))
+               (.init ^KeyValueStore @inner-store ctx s)))
 
-           (^void flush [] (.flush @inner-store))
+           (^void flush [] (.flush ^StateStore @inner-store))
 
-           (^void close [] (.close @inner-store))
+           (^void close [] (.close ^StateStore @inner-store))
 
-           (^boolean persistent [] (.persistent @inner-store))
+           (^boolean persistent [] (.persistent ^StateStore @inner-store))
 
-           (^boolean isOpen [] (.isOpen @inner-store))
+           (^boolean isOpen [] (.isOpen ^StateStore @inner-store))
 
            (^QueryResult query [^Query query ^PositionBound position-bound ^QueryConfig query-config]
-             (.query @inner-store query position-bound query-config))
+             (.query ^StateStore @inner-store query position-bound query-config))
 
-           (^Position getPosition [] (.getPosition @inner-store))
+           (^Position getPosition [] (.getPosition ^StateStore @inner-store))
 
-           (get [o] (.get @inner-store o))
+           (get [o] (.get ^KeyValueStore @inner-store o))
 
-           (^KeyValueIterator range [o1 o2] (.range @inner-store o1 o2))
+           (^KeyValueIterator range [o1 o2] (.range ^KeyValueStore @inner-store o1 o2))
 
-           (^KeyValueIterator reverseRange [o1 o2] (.reverseRange @inner-store o1 o2))
+           (^KeyValueIterator reverseRange [o1 o2] (.reverseRange ^KeyValueStore @inner-store o1 o2))
 
-           (^KeyValueIterator all [] (.all @inner-store))
+           (^KeyValueIterator all [] (.all ^KeyValueStore @inner-store))
 
-           (^KeyValueIterator reverseAll [] (.reverseAll @inner-store))
+           (^KeyValueIterator reverseAll [] (.reverseAll ^KeyValueStore @inner-store))
 
            (^KeyValueIterator prefixScan [o ^Serializer serializer]
-             (.prefixScan @inner-store o serializer))
+             (.prefixScan ^KeyValueStore @inner-store o serializer))
 
            (^long approximateNumEntries []
-             (.approximateNumEntries @inner-store))
+             (.approximateNumEntries ^KeyValueStore @inner-store))
 
            (setFlushListener
              [^CacheFlushListener listener b]
-             (.setFlushListener @inner-store listener b))
+             (.setFlushListener ^MeteredKeyValueStore @inner-store listener b))
 
-           (^void clearCache [] (.clearCache @inner-store))
+           (^void clearCache [] (.clearCache ^CachedStateStore @inner-store))
 
-           (^void flushCache [] (.flushCache @inner-store))
+           (^void flushCache [] (.flushCache ^CachedStateStore @inner-store))
 
            (wrapped [] @inner-store))
          :else
@@ -261,7 +264,7 @@
   store-factory)
 
 (defmethod find-store-factory-alternative StoreBuilderWrapper
-  [store-factory store-name]
+  [^StoreBuilderWrapper store-factory store-name]
   (-> (.get store-factory-builder-field store-factory)
       (find-store-builder-alternative store-name)
       (StoreBuilderWrapper.)))
@@ -285,13 +288,13 @@
 
 (defn alternative-store
   [store-name ^StoreFactory state-store-factory]
-  (-> (find-store-factory-alternative state-store-factory store-name)
-      (.withLoggingDisabled)))
+  (let [^StoreFactory alt (find-store-factory-alternative state-store-factory store-name)]
+    (.withLoggingDisabled alt)))
 
 (defn share-global-stores
   [topology]
   (let [i-builder (TopologyInternalsAccessor/internalTopologyBuilder topology)
-        global-store-builders (.get global-state-builders-field i-builder)]
+        ^Map global-store-builders (.get global-state-builders-field i-builder)]
     (doseq [[n sb] global-store-builders]
       (when-not (isa? (type sb) SingletonStoreFactory)
         (.put global-store-builders n (singleton-store-builder sb)))))

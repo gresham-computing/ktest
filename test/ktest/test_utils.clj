@@ -101,7 +101,7 @@
 
 (defn add-store
   [store]
-  (.addStateStore (streams-builder) (Stores/keyValueStoreBuilder (Stores/persistentKeyValueStore store) nil nil)))
+  (.addStateStore ^StreamsBuilder (streams-builder) (Stores/keyValueStoreBuilder (Stores/persistentKeyValueStore store) nil nil)))
 
 (defn ktable
   ([builder topic-config store-name]
@@ -202,25 +202,25 @@
                                 (.withValueSerde (:value-serde store-config)))))
 
 (defn group-by-key
-  ([stream]
+  ([^KStream stream]
    (.groupByKey stream))
-  ([stream serde-config]
+  ([^KStream stream serde-config]
    (.groupByKey stream (Grouped/with (:key-serde serde-config)
                                      (:value-serde serde-config)))))
 
 (defn to-kstream
-  [ktable]
+  [^KTable ktable]
   (.toStream ktable))
 
 (defn transform
-  ([stream transformer-supplier-fn stores]
+  ([^KStream stream transformer-supplier-fn stores]
    (.transform stream
                (reify TransformerSupplier
                  (get
                    [_]
                    (transformer-supplier-fn)))
                (into-array String stores)))
-  ([stream transformer-supplier-fn]
+  ([^KStream stream transformer-supplier-fn]
    (.transform stream
                (reify TransformerSupplier
                  (get

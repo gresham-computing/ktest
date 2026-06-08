@@ -3,14 +3,23 @@
             [ktest.internal.interop :as i]
             [ktest.protocols.driver :refer :all]
             [ktest.utils :refer :all])
-  (:import (java.time
+  (:import (clojure.lang
+            IObj)
+           (java.nio.charset
+            StandardCharsets)
+           (java.time
             Duration
             Instant)
+           (org.apache.kafka.clients.consumer
+            ConsumerRecord)
            (org.apache.kafka.common
             TopicPartition)
            (org.apache.kafka.common.header
             Header)
+           (org.apache.kafka.common.serialization
+            Serde)
            (org.apache.kafka.streams
+            KeyValue
             TopologyInternalsAccessor
             TopologyTestDriver)
            (org.apache.kafka.streams.processor
@@ -18,7 +27,11 @@
            (org.apache.kafka.streams.processor.internals
             StreamTask)
            (org.apache.kafka.streams.state
-            ValueAndTimestamp)))
+            KeyValueIterator
+            KeyValueStore
+            ValueAndTimestamp)
+           (org.apache.kafka.streams.test
+            TestRecord)))
 
 (defn- raw-repartition-topic
   [application-id topic]
@@ -29,47 +42,42 @@
 (defn- default-capture
   [application-id allow-first? source? repartition-topic? repartitions]
   (let [first-time? (atom allow-first?)]
-    (fn [^StreamTask delegate ^TopicPartition topic-partition message]
+    (fn [^StreamTask delegate ^TopicPartition topic-partition ^ConsumerRecord message]
       (let [[first-time? _] (reset-vals! first-time? false)
             topic (.topic topic-partition)]
         (cond
-          ;; the first time we see something, it's the thing we just manually
-          ;; sent in, so let it through!
           first-time? (.addRecords delegate topic-partition [message])
 
-          ;; if it's a repartition topic we should make sure we direct this to
-          ;; the same topology but on the correct partition so capture it
           (repartition-topic? topic) (swap! repartitions
                                             conj
                                             {(raw-repartition-topic application-id topic)
                                              [{:key (.key message)
                                                :value (.value message)}]})
 
-          ;; any time we hit a source except the first time, the topology
-          ;; driver will also say this is an output so don't do anything
-          ;; otherwise we'll collect it twice
           (source? topic) nil
 
-          ;; else it is an internal topic that doesn't cause a repartition, so
-          ;; let it go through the current topology
           :else (.addRecords delegate topic-partition [message]))))))
 
 (defn- headers->map
   [headers]
-  (->> headers
-       (map (fn [^Header h]
-              [(.key h) (when-let [v (.value h)] (String. v))]))
-       (into {})))
+  (reduce (fn [m ^Header h]
+            (let [k (.key h)]
+              (when (contains? m k)
+                (binding [*out* *err*]
+                  (println "WARN: duplicate Kafka header key:" k)))
+              (assoc m k (when-let [v (.value h)] (String. v StandardCharsets/UTF_8)))))
+          {}
+          headers))
 
 (defn- read-exhaustively
-  [^TopologyTestDriver driver sink opts]
-  (->> (.createOutputTopic driver sink (.deserializer (:key-serde opts)) (.deserializer (:value-serde opts)))
+  [^TopologyTestDriver driver sink {:keys [^Serde key-serde ^Serde value-serde]}]
+  (->> (.createOutputTopic driver sink (.deserializer key-serde) (.deserializer value-serde))
        (.readRecordsToList)
-       (map (fn [record]
+       (map (fn [^TestRecord record]
               (let [value (.value record)
                     hdrs (headers->map (.headers record))
-                    value (if (and (seq hdrs) (some? value) (instance? clojure.lang.IObj value))
-                            (with-meta value {:kafka-headers hdrs})
+                    value (if (and (seq hdrs) (some? value) (instance? IObj value))
+                            (vary-meta value assoc :kafka-headers hdrs)
                             value)]
                 {sink [{:key (.key record) :value value}]})))))
 
@@ -79,12 +87,10 @@
        (mapcat #(read-exhaustively driver % opts))))
 
 (defn- deserialize-msg
-  [opts topic msg]
-  (let [key-deserilizer (.deserializer (:key-serde opts))
-        value-deserilizer (.deserializer (:value-serde opts))]
-    (-> msg
-        (update :key #(.deserialize key-deserilizer topic %))
-        (update :value #(.deserialize value-deserilizer topic %)))))
+  [{:keys [^Serde key-serde ^Serde value-serde]} topic msg]
+  (-> msg
+      (update :key #(.deserialize (.deserializer key-serde) topic %))
+      (update :value #(.deserialize (.deserializer value-serde) topic %))))
 
 (defn- form-output
   [^TopologyTestDriver driver root-application-id sinks repartitions opts]
@@ -117,20 +123,20 @@
     :else nil))
 
 (defn extra-info-from-store
-  [state-store]
+  [^KeyValueStore state-store]
   (->> (.all state-store)
        (iterator-seq)
-       (reduce (fn [result key-value]
+       (reduce (fn [result ^KeyValue key-value]
                  (let [v (.value key-value)
                        v (if (instance? ValueAndTimestamp v)
-                           (.value v)
+                           (.value ^ValueAndTimestamp v)
                            v)]
                    (assoc result (.key key-value) v))) {})))
 
 (defrecord TopologyDriver
   [opts state ^TopologyTestDriver driver
    root-application-id application-id partition-id
-   sources sinks repartition-topic? key-serde value-serde]
+   sources sinks repartition-topic? ^Serde key-serde ^Serde value-serde]
 
   Driver
 
@@ -185,7 +191,7 @@
       {:topology r
        :config {}})))
 
-(defn driver
+(defn ^ktest.protocols.driver.Driver driver
   [root-application-id partition-id topology-supplier opts]
   (let [initial-epoch (Instant/ofEpochMilli (:initial-ms opts))
         state (atom {:epoch (:initial-ms opts)})

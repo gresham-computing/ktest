@@ -4,7 +4,9 @@
             [ktest.drivers.topology-driver :as sut]
             [ktest.protocols.driver :as driver]
             [ktest.test-utils :as j])
-  (:import (org.apache.kafka.common.header.internals
+  (:import (java.nio.charset
+            StandardCharsets)
+           (org.apache.kafka.common.header.internals
             RecordHeader)
            (org.apache.kafka.streams.processor.api
             FixedKeyRecord)))
@@ -99,7 +101,7 @@
     (-> (j/kstream builder (j/topic-config "input"))
         (j/process-values
          (fn [^FixedKeyRecord record]
-           (.add (.headers record) (RecordHeader. "audit.test" (.getBytes "hello")))))
+           (.add (.headers record) (RecordHeader. "audit.test" (.getBytes "hello" StandardCharsets/UTF_8)))))
         (j/to (j/topic-config "output")))
     (j/build-topology builder)))
 
