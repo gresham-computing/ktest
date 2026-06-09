@@ -1,7 +1,9 @@
 (ns ktest.config
   (:require [ktest.stores :as stores])
   (:import (java.util
-            Random)))
+            Random)
+           (org.apache.kafka.common.serialization
+            Serde)))
 
 (defn default-topology-mutator
   [topology _opts]
@@ -10,7 +12,7 @@
       stores/share-global-stores))
 
 (defn default-partition-strategy
-  [topic {:keys [key] :as msg} {:keys [key-serde]}]
+  [topic {:keys [key] :as _msg} {:keys [^Serde key-serde]}]
   (let [topic-name (if (string? topic) topic (:topic-name topic))]
     (->> key
          (.serialize (.serializer key-serde) topic-name)

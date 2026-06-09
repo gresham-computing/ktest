@@ -4,6 +4,9 @@
             [ktest.test-utils :as j])
   (:import (java.time
             Duration)
+           (org.apache.kafka.streams
+            KeyValue
+            StreamsBuilder)
            (org.apache.kafka.streams.processor
             ProcessorContext)
            (org.apache.kafka.streams.state
@@ -115,7 +118,7 @@
 (defn transform-topology
   []
   (let [builder (j/streams-builder)]
-    (.addStateStore builder
+    (.addStateStore ^StreamsBuilder builder
                     (Stores/keyValueStoreBuilder
                      (Stores/persistentKeyValueStore "trans-store")
                      j/edn-serde j/edn-serde))
@@ -135,7 +138,7 @@
 (defn select-key-transform-topology
   []
   (let [builder (j/streams-builder)]
-    (.addStateStore builder
+    (.addStateStore ^StreamsBuilder builder
                     (Stores/keyValueStoreBuilder
                      (Stores/persistentKeyValueStore "trans-store")
                      j/edn-serde j/edn-serde))
@@ -156,7 +159,7 @@
 (defn repartition-transform-topology
   []
   (let [builder (j/streams-builder)]
-    (.addStateStore builder
+    (.addStateStore ^StreamsBuilder builder
                     (Stores/keyValueStoreBuilder
                      (Stores/persistentKeyValueStore "trans-store")
                      j/edn-serde j/edn-serde))
@@ -275,7 +278,7 @@
   (let [builder (j/streams-builder)]
     (-> (j/kstream builder (j/topic-config "time-input"))
         (j/transform
-         (j/punctuator (Duration/ofMillis 1) (fn [ctx epoch]
+         (j/punctuator (Duration/ofMillis 1) (fn [^ProcessorContext ctx epoch]
                                                (.forward ctx "k" (str "v at " epoch)))))
         (j/to (j/topic-config "time-output")))
     (j/build-topology builder)))
@@ -433,7 +436,7 @@
              (sut/pipe driver "join-input" {:key "k" :value "global-key"}))))))
 
 (defn get-from-store
-  [ctx store-name k]
+  [^ProcessorContext ctx store-name k]
   (let [^KeyValueStore store (.getStateStore ctx store-name)
         ^ValueAndTimestamp vt (.get store k)]
     (when vt (.value vt))))
@@ -450,7 +453,7 @@
     (-> (j/kstream builder (j/topic-config "empty"))
         (j/transform
          (j/punctuator (Duration/ofMillis 1)
-                       (fn [ctx timestamp]
+                       (fn [^ProcessorContext ctx timestamp]
                          (when-let [t1-value (get-from-store ctx "trigger-1-store" "key")]
                            (.forward ctx
                                      "key"
@@ -468,7 +471,7 @@
     (-> (j/kstream builder (j/topic-config "empty"))
         (j/transform
          (j/punctuator (Duration/ofMillis 1)
-                       (fn [ctx timestamp]
+                       (fn [^ProcessorContext ctx timestamp]
                          (when-let [t1-map (get-from-store ctx "trigger-2-store" "key")]
                            (.forward ctx
                                      "key"
@@ -527,14 +530,14 @@
 
 (defn store-by-range-key
   [^ProcessorContext ctx store-name foreign-key original-key original-value]
-  (let [store (.getStateStore ctx store-name)
+  (let [^KeyValueStore store (.getStateStore ctx store-name)
         k (within-range-key foreign-key original-key)]
     (.put store k original-value)))
 
 (defn range-topology
   []
   (let [builder (j/streams-builder)]
-    (.addStateStore builder
+    (.addStateStore ^StreamsBuilder builder
                     (Stores/keyValueStoreBuilder
                      (Stores/persistentKeyValueStore "trans-store")
                      j/edn-serde j/edn-serde))
@@ -550,7 +553,7 @@
          (j/transformer
           (fn [^ProcessorContext ctx k v]
             (let [^KeyValueStore store (.getStateStore ctx "trans-store")]
-              (doseq [kv-java (iterator-seq (.range store (before-range-key k) (after-range-key k)))]
+              (doseq [^KeyValue kv-java (iterator-seq (.range store (before-range-key k) (after-range-key k)))]
                 (.forward ctx (.key kv-java) (.value kv-java))))))
          ["trans-store"])
         (j/to (j/topic-config "output")))

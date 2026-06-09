@@ -3,7 +3,7 @@
             [ktest.driver :refer [default-driver]]
             [ktest.protocols.batch-driver :as b]))
 
-(defn driver
+(defn ^ktest.protocols.batch_driver.BatchDriver driver
   [opts name-topology-supplier-map]
   {:pre [(or (nil? opts) (map? opts))
          (map? name-topology-supplier-map)

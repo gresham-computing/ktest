@@ -16,9 +16,9 @@
             StreamTask)))
 
 (defn- properties
-  [p]
+  ^Properties [p]
   (reduce-kv
-   (fn [p k v]
+   (fn [^Properties p k v]
      (doto p
        (.setProperty (name k) v)))
    (Properties.)

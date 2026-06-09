@@ -36,6 +36,11 @@
             PunctuationType
             Punctuator
             To)
+           (org.apache.kafka.streams.processor.api
+            FixedKeyProcessor
+            FixedKeyProcessorContext
+            FixedKeyProcessorSupplier
+            FixedKeyRecord)
            (org.apache.kafka.streams.state
             Stores)))
 
@@ -96,7 +101,7 @@
 
 (defn add-store
   [store]
-  (.addStateStore (streams-builder) (Stores/keyValueStoreBuilder (Stores/persistentKeyValueStore store) nil nil)))
+  (.addStateStore ^StreamsBuilder (streams-builder) (Stores/keyValueStoreBuilder (Stores/persistentKeyValueStore store) nil nil)))
 
 (defn ktable
   ([builder topic-config store-name]
@@ -139,6 +144,23 @@
               ^ValueJoiner (reify ValueJoiner
                              (apply [_ a b] (joiner-fn a b))))))
 
+(defn process-values
+  [^KStream kstream f]
+  (.processValues kstream
+                  (reify FixedKeyProcessorSupplier
+                    (get
+                      [_]
+                      (let [ctx (atom nil)]
+                        (reify FixedKeyProcessor
+                          (init
+                            [_ context]
+                            (reset! ctx context))
+
+                          (process
+                            [_ record]
+                            (f record)
+                            (.forward ^FixedKeyProcessorContext @ctx record))))))
+                  (into-array String [])))
 (defn to
   [kstream topic-config]
   (.to ^KStream kstream
@@ -180,25 +202,25 @@
                                 (.withValueSerde (:value-serde store-config)))))
 
 (defn group-by-key
-  ([stream]
+  ([^KStream stream]
    (.groupByKey stream))
-  ([stream serde-config]
+  ([^KStream stream serde-config]
    (.groupByKey stream (Grouped/with (:key-serde serde-config)
                                      (:value-serde serde-config)))))
 
 (defn to-kstream
-  [ktable]
+  [^KTable ktable]
   (.toStream ktable))
 
 (defn transform
-  ([stream transformer-supplier-fn stores]
+  ([^KStream stream transformer-supplier-fn stores]
    (.transform stream
                (reify TransformerSupplier
                  (get
                    [_]
                    (transformer-supplier-fn)))
                (into-array String stores)))
-  ([stream transformer-supplier-fn]
+  ([^KStream stream transformer-supplier-fn]
    (.transform stream
                (reify TransformerSupplier
                  (get
