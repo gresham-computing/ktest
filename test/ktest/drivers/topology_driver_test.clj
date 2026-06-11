@@ -56,8 +56,9 @@
     (is (= {{:repartition true
              :application-id "application-id"
              :topic-name "KSTREAM-KEY-SELECT-0000000003-repartition"}
-            [{:key "constant"
-              :value "v1"}]}
+            [{:key     "constant"
+              :value   "v1"
+              :headers {}}]}
            (driver/pipe-input driver "stream-input" {:key "k" :value "v1"})))
 
     (is (= {"join-output" [{:key "constant"
@@ -71,6 +72,19 @@
                                :value "v1"})))
     (is (= {"table-input" {"partition-id" {"constant" "table1"}}}
            (driver/stores-info driver)))))
+
+(deftest headers-captured-in-repartition
+  (with-open [driver (sut/driver "application-id"
+                                 "partition-id"
+                                 repartition-transform-topology
+                                 opts)]
+    (driver/pipe-input driver "table-input" {:key "constant" :value "table1"})
+    (let [result (driver/pipe-input driver "stream-input"
+                                    {:key     "k"
+                                     :value   "v1"
+                                     :headers {"trace-id" "abc-123"}})]
+      (is (= {"trace-id" "abc-123"}
+             (-> result vals first first :headers))))))
 
 (defn topology-with-store-not-used
   []
@@ -105,13 +119,39 @@
         (j/to (j/topic-config "output")))
     (j/build-topology builder)))
 
+(deftest map->headers-round-trip
+  (is (= {"audit.event.id" "evt-1"
+           "audit.event.type" "party-create"
+           "nullable" nil}
+          (->> {"audit.event.id" "evt-1"
+                "audit.event.type" "party-create"
+                "nullable" nil}
+               (sut/map->headers)
+               (sut/headers->map))))
+  (is (nil? (sut/map->headers nil)))
+  (is (nil? (sut/map->headers {}))))
+
+(deftest headers-sent-on-input
+  (with-open [driver (sut/driver "application-id"
+                                 "partition-id"
+                                 very-simple-topology
+                                 opts)]
+    (let [result (driver/pipe-input driver "input"
+                                    {:key "k"
+                                     :value {:foo "bar"}
+                                     :headers {"audit.event.id" "evt-1"}})
+          output-msg (-> result (get "output") first)]
+      (is (= {:foo "bar"} (:value output-msg)))
+      (is (= {"audit.event.id" "evt-1"}
+             (:kafka-headers (meta output-msg)))))))
+
 (deftest headers-captured-as-metadata
   (with-open [driver (sut/driver "application-id"
                                  "partition-id"
                                  header-setting-topology
                                  opts)]
     (let [result (driver/pipe-input driver "input" {:key "k" :value {:foo "bar"}})
-          output-value (-> result (get "output") first :value)]
-      (is (= {:foo "bar"} output-value))
+          output-msg (-> result (get "output") first)]
+      (is (= {:foo "bar"} (:value output-msg)))
       (is (= {"audit.test" "hello"}
-             (:kafka-headers (meta output-value)))))))
+             (:kafka-headers (meta output-msg)))))))

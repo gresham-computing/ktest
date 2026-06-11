@@ -247,6 +247,15 @@
                                         :v "v3"}]}]}
              (sut/pipe driver "trans-input" {:key "other" :value "v3"}))))))
 
+(deftest headers-survive-repartition
+  (with-open [driver (sut/driver j/serde-config
+                                 {"transform-repartition" repartition-transform-topology})]
+    (let [result (sut/pipe driver "trans-input" {:key     "k"
+                                                :value   {:data "v1"}
+                                                :headers {"trace-id" "abc-123"}})]
+      (is (= {"trace-id" "abc-123"}
+             (:kafka-headers (meta (first (get result "through")))))))))
+
 (defn first-connected-topology
   []
   (let [builder (j/streams-builder)]
