@@ -10,4 +10,4 @@ clj -Spom
 # generate java classes
 clj -M:build
 # run tests
-clj -M:test
+clj -M:test:run-tests

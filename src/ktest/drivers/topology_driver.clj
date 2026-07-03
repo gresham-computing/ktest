@@ -3,9 +3,7 @@
             [ktest.internal.interop :as i]
             [ktest.protocols.driver :refer :all]
             [ktest.utils :refer :all])
-  (:import (clojure.lang
-            IObj)
-           (java.nio.charset
+  (:import (java.nio.charset
             StandardCharsets)
            (java.time
             Duration
@@ -16,6 +14,8 @@
             TopicPartition)
            (org.apache.kafka.common.header
             Header)
+           (org.apache.kafka.common.header.internals
+            RecordHeaders)
            (org.apache.kafka.common.serialization
             Serde)
            (org.apache.kafka.streams
@@ -39,6 +39,25 @@
     (subs topic (inc (count application-id)))
     (throw (ex-info "This method should only be called with a topologies repartition topics" {}))))
 
+(defn headers->map
+  [headers]
+  (reduce (fn [m ^Header h]
+            (let [k (.key h)]
+              (when (contains? m k)
+                (binding [*out* *err*]
+                  (println "WARN: duplicate Kafka header key:" k)))
+              (assoc m k (when-let [v (.value h)] (String. v StandardCharsets/UTF_8)))))
+          {}
+          headers))
+
+(defn map->headers
+  [header-map]
+  (when (not-empty header-map)
+    (let [headers (RecordHeaders.)]
+      (doseq [[k v] header-map]
+        (.add headers ^String k (when v (.getBytes ^String v StandardCharsets/UTF_8))))
+      headers)))
+
 (defn- default-capture
   [application-id allow-first? source? repartition-topic? repartitions]
   (let [first-time? (atom allow-first?)]
@@ -51,23 +70,13 @@
           (repartition-topic? topic) (swap! repartitions
                                             conj
                                             {(raw-repartition-topic application-id topic)
-                                             [{:key (.key message)
-                                               :value (.value message)}]})
+                                             [{:key     (.key message)
+                                               :value   (.value message)
+                                               :headers (headers->map (.headers message))}]})
 
           (source? topic) nil
 
           :else (.addRecords delegate topic-partition [message]))))))
-
-(defn- headers->map
-  [headers]
-  (reduce (fn [m ^Header h]
-            (let [k (.key h)]
-              (when (contains? m k)
-                (binding [*out* *err*]
-                  (println "WARN: duplicate Kafka header key:" k)))
-              (assoc m k (when-let [v (.value h)] (String. v StandardCharsets/UTF_8)))))
-          {}
-          headers))
 
 (defn- read-exhaustively
   [^TopologyTestDriver driver sink {:keys [^Serde key-serde ^Serde value-serde]}]
@@ -76,10 +85,10 @@
        (map (fn [^TestRecord record]
               (let [value (.value record)
                     hdrs (headers->map (.headers record))
-                    value (if (and (seq hdrs) (some? value) (instance? IObj value))
-                            (vary-meta value assoc :kafka-headers hdrs)
-                            value)]
-                {sink [{:key (.key record) :value value}]})))))
+                    msg {:key (.key record) :value value}]
+                {sink [(if (seq hdrs)
+                         (vary-meta msg assoc :kafka-headers hdrs)
+                         msg)]})))))
 
 (defn- collect-outputs
   [^TopologyTestDriver driver sinks opts]
@@ -151,7 +160,9 @@
                                       sources
                                       repartition-topic?
                                       repartitions))
-        (.pipeInput input-topic (:key message) (:value message))
+        (if-let [hdrs (map->headers (:headers message))]
+          (.pipeInput input-topic (TestRecord. (:key message) (:value message) ^org.apache.kafka.common.header.Headers hdrs))
+          (.pipeInput input-topic (:key message) (:value message)))
         (form-output driver root-application-id sinks @repartitions opts))))
 
 

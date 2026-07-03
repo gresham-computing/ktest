@@ -10,7 +10,7 @@
     <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojure</artifactId>
-      <version>1.10.1</version>
+      <version>1.12.5</version>
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
@@ -20,7 +20,7 @@
     <dependency>
       <groupId>digest</groupId>
       <artifactId>digest</artifactId>
-      <version>1.4.9</version>
+      <version>1.4.10</version>
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
