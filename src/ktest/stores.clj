@@ -118,9 +118,15 @@
                                     (restore [_this _a _b])))
                (.init ^TimestampedKeyValueStore @inner-store v1 v2)))
 
-           (flush [] (.flush ^TimestampedKeyValueStore @inner-store))
+           (flush
+             []
+             (when (.isOpen ^StateStore @inner-store)
+               (.flush ^TimestampedKeyValueStore @inner-store)))
 
-           (close [] (.close ^TimestampedKeyValueStore @inner-store))
+           (close
+             []
+             (when (.isOpen ^StateStore @inner-store)
+               (.close ^TimestampedKeyValueStore @inner-store)))
 
            (persistent [] (.persistent ^StateStore @inner-store))
 
@@ -176,9 +182,11 @@
                                      (restore [_this _a _b])))
                (.init ^KeyValueStore @inner-store ctx s)))
 
-           (^void flush [] (.flush ^StateStore @inner-store))
+           (^void flush [] (when (.isOpen ^StateStore @inner-store)
+                             (.flush ^StateStore @inner-store)))
 
-           (^void close [] (.close ^StateStore @inner-store))
+           (^void close [] (when (.isOpen ^StateStore @inner-store)
+                             (.close ^StateStore @inner-store)))
 
            (^boolean persistent [] (.persistent ^StateStore @inner-store))
 
