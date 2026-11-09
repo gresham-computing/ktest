@@ -211,7 +211,9 @@
                        (Thread. ^Runnable (fn []
                                             (try
                                               (Utils/delete root)
-                                              (catch Exception _)))))
+                                              (catch Exception e
+                                                (binding [*out* *err*]
+                                                  (println "ktest: failed to delete state dir" (str root) "-" (ex-message e))))))))
      root)))
 
 (defn- fresh-state-dir
